@@ -46,10 +46,20 @@ const Dashboard = () => {
   }))
 
   // 准备语言分布图表数据
-  const languageData = Object.entries(stats.language_distribution || {}).map(([lang, count]) => ({
-    type: lang === 'zh' ? '中文' : '英文',
-    value: count
-  }))
+  const languageData = Object.entries(stats.language_distribution || {}).map(([lang, count]) => {
+    let type = '未知'
+    if (lang === 'zh') {
+      type = '中文'
+    } else if (lang === 'en') {
+      type = '英文'
+    } else if (lang === '未知') {
+      type = '未知'
+    }
+    return {
+      type,
+      value: count
+    }
+  })
 
   // 准备方面分布数据（取前10个）
   const aspectData = Object.entries(stats.aspect_distribution || {})
@@ -231,7 +241,8 @@ const getSentimentText = (label) => {
     positive: '积极',
     neutral: '中立',
     negative: '负面',
-    very_negative: '非常负面'
+    very_negative: '非常负面',
+    '未分析': '未分析'
   }
   return texts[label] || label
 }

@@ -37,6 +37,8 @@ class Feedback(db.Model):
     original_language = db.Column(db.String(10), default='zh')  # 'zh' 或 'en'
     sentiment_label = db.Column(db.String(20))  # very_positive, positive, neutral, negative, very_negative
     sentiment_score = db.Column(db.Float)
+    hotel_name = db.Column(db.String(200))  # 酒店名称
+    rating = db.Column(db.Float)  # 评分（1-5）
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # 关系
@@ -51,6 +53,8 @@ class Feedback(db.Model):
             'original_language': self.original_language,
             'sentiment_label': self.sentiment_label,
             'sentiment_score': self.sentiment_score,
+            'hotel_name': self.hotel_name,
+            'rating': self.rating,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'aspects': [aspect.to_dict() for aspect in self.aspects]
         }

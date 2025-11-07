@@ -23,12 +23,21 @@ def get_analyzer():
         analyzer = SentimentAnalyzer()
     return analyzer
 
+def require_admin():
+    """检查管理员权限"""
+    if 'user_id' not in session:
+        return jsonify({'error': '请先登录'}), 401
+    if session.get('role') != 'admin':
+        return jsonify({'error': '需要管理员权限'}), 403
+    return None
+
 @analysis_bp.route('/sentiment', methods=['POST'])
 def analyze_sentiment():
-    """分析文本情感"""
+    """分析文本情感（仅管理员）"""
     try:
-        if 'user_id' not in session:
-            return jsonify({'error': '请先登录'}), 401
+        error = require_admin()
+        if error:
+            return error
         
         data = request.get_json()
         text = data.get('text', '').strip()
@@ -51,10 +60,11 @@ def analyze_sentiment():
 
 @analysis_bp.route('/aspect', methods=['POST'])
 def analyze_aspect():
-    """分析特定方面的情感"""
+    """分析特定方面的情感（仅管理员）"""
     try:
-        if 'user_id' not in session:
-            return jsonify({'error': '请先登录'}), 401
+        error = require_admin()
+        if error:
+            return error
         
         data = request.get_json()
         text = data.get('text', '').strip()
@@ -80,10 +90,11 @@ def analyze_aspect():
 
 @analysis_bp.route('/aspects', methods=['POST'])
 def analyze_aspects():
-    """分析所有方面的情感"""
+    """分析所有方面的情感（仅管理员）"""
     try:
-        if 'user_id' not in session:
-            return jsonify({'error': '请先登录'}), 401
+        error = require_admin()
+        if error:
+            return error
         
         data = request.get_json()
         text = data.get('text', '').strip()
@@ -103,10 +114,11 @@ def analyze_aspects():
 
 @analysis_bp.route('/batch', methods=['POST'])
 def batch_analyze():
-    """批量分析评论文件"""
+    """批量分析评论文件（仅管理员）"""
     try:
-        if 'user_id' not in session:
-            return jsonify({'error': '请先登录'}), 401
+        error = require_admin()
+        if error:
+            return error
         
         if 'file' not in request.files:
             return jsonify({'error': '请上传文件'}), 400
@@ -115,19 +127,36 @@ def batch_analyze():
         if file.filename == '':
             return jsonify({'error': '文件名为空'}), 400
         
+        print(f"开始处理批量上传文件: {file.filename}")
+        
         # 解析文件
         try:
             feedbacks_data = parse_uploaded_file(file)
+            print(f"文件解析成功，共 {len(feedbacks_data)} 条评论")
         except Exception as e:
+            print(f"文件解析失败: {str(e)}")
+            print(traceback.format_exc())
             return jsonify({'error': f'文件解析失败: {str(e)}'}), 400
         
         if not feedbacks_data:
             return jsonify({'error': '文件中没有有效的评论数据'}), 400
         
+        # 限制批量处理数量，避免超时
+        max_batch_size = 10000
+        if len(feedbacks_data) > max_batch_size:
+            return jsonify({
+                'error': f'文件包含的评论数量过多（{len(feedbacks_data)}条），请分批上传，每次不超过{max_batch_size}条'
+            }), 400
+        
         # 批量分析
         analyzer = get_analyzer()
         processed = 0
         errors = []
+        
+        print(f"开始批量分析，共 {len(feedbacks_data)} 条评论")
+        
+        # 根据数据量调整提交频率
+        commit_interval = 50 if len(feedbacks_data) > 1000 else 20
         
         for idx, feedback_data in enumerate(feedbacks_data):
             try:
@@ -164,22 +193,50 @@ def batch_analyze():
                 
                 processed += 1
                 
+                # 定期提交，避免内存问题和事务超时
+                if processed % commit_interval == 0:
+                    try:
+                        db.session.commit()
+                        print(f"已处理 {processed}/{len(feedbacks_data)} 条评论")
+                    except Exception as commit_error:
+                        db.session.rollback()
+                        error_msg = f"数据库提交失败（第{processed}条）: {str(commit_error)}"
+                        errors.append(error_msg)
+                        print(error_msg)
+                        # 继续处理，不中断整个流程
+                
             except Exception as e:
-                errors.append(f"第{idx+1}条评论处理失败: {str(e)}")
+                error_msg = f"第{idx+1}条评论处理失败: {str(e)}"
+                errors.append(error_msg)
+                print(error_msg)
+                # 只打印关键错误，避免日志过多
+                if len(errors) <= 20:  # 只打印前20个错误的详细堆栈
+                    print(traceback.format_exc())
+                db.session.rollback()  # 回滚当前事务
                 continue
+            
+        # 最终提交剩余的数据
+        try:
+            db.session.commit()
+        except Exception as commit_error:
+            db.session.rollback()
+            error_msg = f"最终提交失败: {str(commit_error)}"
+            errors.append(error_msg)
+            print(error_msg)
         
-        db.session.commit()
+        print(f"批量分析完成，成功处理 {processed}/{len(feedbacks_data)} 条评论")
         
         return jsonify({
             'message': '批量分析完成',
             'processed': processed,
             'total': len(feedbacks_data),
-            'errors': errors[:10]  # 只返回前10个错误
+            'errors': errors[:10] if errors else []  # 只返回前10个错误
         }), 200
         
     except Exception as e:
         db.session.rollback()
-        print(f"批量分析失败: {str(e)}")
+        error_msg = f"批量分析失败: {str(e)}"
+        print(error_msg)
         print(traceback.format_exc())
-        return jsonify({'error': f'批量分析失败: {str(e)}'}), 500
+        return jsonify({'error': error_msg}), 500
 

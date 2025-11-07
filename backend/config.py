@@ -19,8 +19,22 @@ class Config:
     # - Qwen/Qwen2-7B-Instruct (7B参数，显存占用约14GB，需要量化)
     MODEL_NAME = 'Qwen/Qwen2-1.5B-Instruct'  # 适合8GB GPU，中英文表现优秀
     MODEL_CACHE_DIR = BASE_DIR / 'model' / 'cache'
-    # 自动检测CUDA，如果有GPU则使用cuda
-    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    # 设备配置：优先使用GPU
+    # 检查CUDA是否可用
+    if torch.cuda.is_available():
+        DEVICE = 'cuda'
+        print(f"✅ 检测到CUDA，将使用GPU: {torch.cuda.get_device_name(0)}")
+        print(f"   CUDA版本: {torch.version.cuda}")
+        print(f"   PyTorch版本: {torch.__version__}")
+    else:
+        DEVICE = 'cpu'
+        print("⚠️  未检测到CUDA，将使用CPU")
+        print("   提示：如需使用GPU，请确保：")
+        print("   1. 已安装NVIDIA GPU驱动")
+        print("   2. 已安装CUDA工具包")
+        print("   3. 已安装支持CUDA的PyTorch版本")
+        print("   安装命令: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
     
     # Flask配置
     SECRET_KEY = 'your-secret-key-here-change-in-production'
@@ -28,8 +42,8 @@ class Config:
     
     # 文件上传配置
     UPLOAD_FOLDER = BASE_DIR / 'data' / 'uploads'
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
-    ALLOWED_EXTENSIONS = {'txt', 'csv', 'xlsx', 'xls'}
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB（支持批量处理10000条评论）
+    ALLOWED_EXTENSIONS = {'txt', 'csv', 'xlsx', 'xls', 'json'}
     
     # 用户配置
     DEFAULT_ADMIN_USERNAME = 'admin'

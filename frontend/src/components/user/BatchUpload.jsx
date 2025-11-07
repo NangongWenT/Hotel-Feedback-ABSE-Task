@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Upload, Button, message, Card, Typography, Space } from 'antd'
+import { Upload, Button, message, Card, Typography, Space, Alert, Spin } from 'antd'
 import { UploadOutlined, FileTextOutlined } from '@ant-design/icons'
 import api from '../../services/api'
 
@@ -9,28 +9,66 @@ const { Dragger } = Upload
 const BatchUpload = ({ onSuccess }) => {
   const [loading, setLoading] = useState(false)
   const [fileList, setFileList] = useState([])
+  const [uploadStatus, setUploadStatus] = useState(null)
 
   const handleUpload = async (options) => {
-    const { file } = options
+    const { file, onSuccess: onUploadSuccess, onError, onProgress } = options
     setLoading(true)
+    setUploadStatus({ type: 'info', message: '正在上传文件...' })
     
     const formData = new FormData()
     formData.append('file', file)
 
     try {
-      const response = await api.post('/analysis/batch', formData, {
+      setUploadStatus({ type: 'info', message: '正在上传文件...' })
+      
+      const response = await api.post('/feedback/batch-upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
+        },
+        timeout: 300000, // 5分钟超时
+        onUploadProgress: (progressEvent) => {
+          if (onProgress) {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+            onProgress({ percent })
+          }
         }
       })
       
-      message.success(`成功上传并分析 ${response.data.processed || 0} 条评论`)
+      setUploadStatus({ 
+        type: 'success', 
+        message: `成功上传 ${response.data.processed || 0} 条评论，共 ${response.data.total || 0} 条，等待管理员分析` 
+      })
+      message.success(`成功上传 ${response.data.processed || 0} 条评论，等待管理员分析`)
+      
+      if (response.data.errors && response.data.errors.length > 0) {
+        message.warning(`部分评论处理失败: ${response.data.errors.length} 条`)
+        console.warn('处理错误:', response.data.errors)
+      }
+      
       setFileList([])
+      setTimeout(() => setUploadStatus(null), 5000) // 5秒后清除状态
+      
+      if (onUploadSuccess) {
+        onUploadSuccess(response.data)
+      }
       if (onSuccess) {
         onSuccess()
       }
     } catch (error) {
-      message.error(error.response?.data?.error || '上传失败')
+      console.error('批量上传失败:', error)
+      const errorMessage = error.response?.data?.error || 
+                          error.message || 
+                          (error.code === 'ECONNABORTED' ? '请求超时，请稍后重试或减少文件大小' : '上传失败')
+      setUploadStatus({ 
+        type: 'error', 
+        message: errorMessage 
+      })
+      message.error(errorMessage)
+      if (onError) {
+        onError(error)
+      }
+      setTimeout(() => setUploadStatus(null), 5000) // 5秒后清除状态
     } finally {
       setLoading(false)
     }
@@ -49,9 +87,9 @@ const BatchUpload = ({ onSuccess }) => {
         return false
       }
       
-      const isLt10M = file.size / 1024 / 1024 < 10
-      if (!isLt10M) {
-        message.error('文件大小不能超过 10MB')
+      const isLt50M = file.size / 1024 / 1024 < 50
+      if (!isLt50M) {
+        message.error('文件大小不能超过 50MB')
         return false
       }
       
@@ -69,18 +107,42 @@ const BatchUpload = ({ onSuccess }) => {
         <div>
           <Title level={5}>批量上传评论</Title>
           <Text type="secondary">
-            支持 CSV、TXT、JSON 格式，文件大小不超过 10MB
+            支持 CSV、TXT、JSON 格式，文件大小不超过 50MB，每次最多上传 10000 条评论（上传后等待管理员分析）
           </Text>
         </div>
         
+        {uploadStatus && (
+          <Alert
+            type={uploadStatus.type}
+            message={uploadStatus.message}
+            showIcon
+            closable
+            onClose={() => setUploadStatus(null)}
+          />
+        )}
+        
         <Dragger {...uploadProps} disabled={loading}>
-          <p className="ant-upload-drag-icon">
-            <FileTextOutlined style={{ fontSize: 48, color: '#1890ff' }} />
-          </p>
-          <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
-          <p className="ant-upload-hint">
-            支持 CSV、TXT、JSON 格式文件
-          </p>
+          {loading ? (
+            <div>
+              <Spin size="large" />
+              <p className="ant-upload-text" style={{ marginTop: 16 }}>
+                正在处理中，请稍候...
+              </p>
+              <p className="ant-upload-hint">
+                正在上传文件，请稍候...
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="ant-upload-drag-icon">
+                <FileTextOutlined style={{ fontSize: 48, color: '#1890ff' }} />
+              </p>
+              <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
+              <p className="ant-upload-hint">
+                支持 CSV、TXT、JSON 格式文件
+              </p>
+            </>
+          )}
         </Dragger>
 
         <div>

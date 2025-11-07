@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import Landing from './pages/Landing'
 import UserPortal from './pages/UserPortal'
 import Dashboard from './pages/Dashboard'
+import AdminPortal from './pages/AdminPortal'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -30,6 +31,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Dashboard />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AdminPortal />
               </Layout>
             </ProtectedRoute>
           }

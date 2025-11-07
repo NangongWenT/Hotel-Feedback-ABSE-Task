@@ -69,8 +69,16 @@ class SentimentAnalyzer:
                 **load_kwargs
             )
             
-            if self.device == 'cpu':
+            # 确保模型在正确的设备上
+            if self.device == 'cuda':
+                # 如果使用device_map='auto'，模型应该已经在GPU上了
+                # 但为了确保，我们检查一下
+                if not hasattr(self.model, 'device') or str(self.model.device) == 'cpu':
+                    self.model = self.model.to('cuda')
+                print(f"模型已加载到GPU: {next(self.model.parameters()).device}")
+            else:
                 self.model = self.model.to('cpu')
+                print(f"模型已加载到CPU")
             
             self.model.eval()
             

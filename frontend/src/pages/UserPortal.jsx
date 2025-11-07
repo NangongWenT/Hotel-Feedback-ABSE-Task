@@ -1,19 +1,14 @@
 import React, { useState, useEffect } from 'react'
-import { Card, Table, Tag, Space, message, Spin, Tabs, Button } from 'antd'
+import { Card, Table, Tag, Space, message, Spin, Tabs, Alert } from 'antd'
 import { useAuth } from '../contexts/AuthContext'
 import FeedbackSubmit from '../components/user/FeedbackSubmit'
 import BatchUpload from '../components/user/BatchUpload'
-import AnalysisResult from '../components/user/AnalysisResult'
 import api from '../services/api'
 import './UserPortal.css'
 
 const UserPortal = () => {
   const [feedbacks, setFeedbacks] = useState([])
   const [loading, setLoading] = useState(false)
-  const [analyzing, setAnalyzing] = useState(false)
-  const [analysisResult, setAnalysisResult] = useState(null)
-  const [analyzingText, setAnalyzingText] = useState('')
-  const [formRef, setFormRef] = useState(null)
   const { user } = useAuth()
 
   useEffect(() => {
@@ -33,35 +28,8 @@ const UserPortal = () => {
   }
 
   const handleSubmitSuccess = () => {
-    message.success('反馈提交成功')
+    message.success('反馈提交成功，等待管理员分析')
     loadFeedbacks()
-  }
-
-  const handleAnalyze = async () => {
-    if (!formRef) {
-      message.warning('请先输入评论')
-      return
-    }
-
-    const text = formRef.getFieldValue('text')
-    if (!text || text.trim().length === 0) {
-      message.warning('请输入要分析的评论')
-      return
-    }
-
-    setAnalyzing(true)
-    setAnalyzingText(text)
-    setAnalysisResult(null)
-
-    try {
-      const response = await api.post('/analysis/aspects', { text })
-      setAnalysisResult(response.data)
-      message.success('分析完成')
-    } catch (error) {
-      message.error(error.response?.data?.error || '分析失败')
-    } finally {
-      setAnalyzing(false)
-    }
   }
 
   const getSentimentColor = (label) => {
@@ -153,39 +121,21 @@ const UserPortal = () => {
 
   const tabItems = [
     {
-      key: 'analyze',
-      label: 'AI分析',
+      key: 'submit',
+      label: '提交反馈',
       children: (
         <div>
-          <Card 
-            title="评论分析" 
-            extra={
-              <Button 
-                type="primary" 
-                loading={analyzing}
-                onClick={handleAnalyze}
-              >
-                开始分析
-              </Button>
-            }
+          <Alert
+            message="提示"
+            description="您只能提交评论，分析功能由管理员在管理端进行。"
+            type="info"
+            showIcon
             style={{ marginBottom: 24 }}
-          >
-            <FeedbackSubmit 
-              onSuccess={handleSubmitSuccess}
-              showSubmitButton={false}
-              onFormRef={setFormRef}
-            />
-          </Card>
-          
-          {analyzing && (
-            <Card>
-              <Spin tip="AI正在分析中，请稍候..." size="large" />
-            </Card>
-          )}
-
-          {analysisResult && !analyzing && (
-            <AnalysisResult result={analysisResult} />
-          )}
+          />
+          <FeedbackSubmit 
+            onSuccess={handleSubmitSuccess}
+            showSubmitButton={true}
+          />
         </div>
       )
     },
@@ -193,7 +143,16 @@ const UserPortal = () => {
       key: 'upload',
       label: '批量上传',
       children: (
-        <BatchUpload onSuccess={handleSubmitSuccess} />
+        <div>
+          <Alert
+            message="提示"
+            description="批量上传的评论将等待管理员分析，不会立即进行分析。"
+            type="info"
+            showIcon
+            style={{ marginBottom: 24 }}
+          />
+          <BatchUpload onSuccess={handleSubmitSuccess} />
+        </div>
       )
     },
     {
@@ -220,7 +179,7 @@ const UserPortal = () => {
 
   return (
     <div className="user-portal">
-      <Tabs defaultActiveKey="analyze" items={tabItems} />
+      <Tabs defaultActiveKey="submit" items={tabItems} />
     </div>
   )
 }

@@ -30,13 +30,17 @@ def get_stats():
         # 总反馈数
         total_feedbacks = Feedback.query.count()
         
-        # 情感分布
+        # 情感分布（处理 None 值）
         sentiment_stats = db.session.query(
             Feedback.sentiment_label,
             func.count(Feedback.id)
         ).group_by(Feedback.sentiment_label).all()
         
-        sentiment_distribution = {label: count for label, count in sentiment_stats}
+        sentiment_distribution = {}
+        for label, count in sentiment_stats:
+            # 处理 None 值
+            key = label if label is not None else '未分析'
+            sentiment_distribution[key] = count
         
         # 最近7天的反馈数
         seven_days_ago = datetime.utcnow() - timedelta(days=7)
@@ -44,15 +48,19 @@ def get_stats():
             Feedback.created_at >= seven_days_ago
         ).count()
         
-        # 语言分布
+        # 语言分布（处理 None 值）
         language_stats = db.session.query(
             Feedback.original_language,
             func.count(Feedback.id)
         ).group_by(Feedback.original_language).all()
         
-        language_distribution = {lang: count for lang, count in language_stats}
+        language_distribution = {}
+        for lang, count in language_stats:
+            # 处理 None 值
+            key = lang if lang is not None else '未知'
+            language_distribution[key] = count
         
-        # 方面统计
+        # 方面统计（处理 None 值）
         aspect_stats = db.session.query(
             AspectSentiment.aspect_name,
             AspectSentiment.sentiment_label,
@@ -64,6 +72,9 @@ def get_stats():
         
         aspect_distribution = {}
         for aspect_name, sentiment_label, count in aspect_stats:
+            # 跳过 None 值
+            if aspect_name is None or sentiment_label is None:
+                continue
             if aspect_name not in aspect_distribution:
                 aspect_distribution[aspect_name] = {}
             aspect_distribution[aspect_name][sentiment_label] = count
@@ -77,7 +88,11 @@ def get_stats():
         }), 200
         
     except Exception as e:
-        return jsonify({'error': f'获取统计失败: {str(e)}'}), 500
+        import traceback
+        error_msg = f'获取统计失败: {str(e)}'
+        print(error_msg)
+        print(traceback.format_exc())
+        return jsonify({'error': error_msg}), 500
 
 @admin_bp.route('/feedbacks', methods=['GET'])
 def list_all_feedbacks():
@@ -121,4 +136,55 @@ def list_users():
         
     except Exception as e:
         return jsonify({'error': f'获取失败: {str(e)}'}), 500
+
+@admin_bp.route('/analyze/<int:feedback_id>', methods=['POST'])
+def analyze_feedback(feedback_id):
+    """分析单个反馈（管理员）"""
+    try:
+        error = require_admin()
+        if error:
+            return error
+        
+        feedback = Feedback.query.get_or_404(feedback_id)
+        
+        # 导入分析器
+        from services.sentiment_analyzer import SentimentAnalyzer
+        from utils.language_detector import detect_language
+        
+        analyzer = SentimentAnalyzer()
+        
+        # 分析情感和方面
+        result = analyzer.analyze_with_aspects(feedback.text)
+        
+        # 更新反馈记录
+        feedback.sentiment_label = result.get('sentiment', {}).get('label', 'neutral')
+        feedback.sentiment_score = result.get('sentiment', {}).get('score', 0.5)
+        
+        # 删除旧的方面情感
+        AspectSentiment.query.filter_by(feedback_id=feedback.id).delete()
+        
+        # 保存新的方面情感
+        aspect_sentiments = result.get('aspect_sentiments', {})
+        for aspect_name, sentiment_label in aspect_sentiments.items():
+            aspect_sentiment = AspectSentiment(
+                feedback_id=feedback.id,
+                aspect_name=aspect_name,
+                sentiment_label=sentiment_label
+            )
+            db.session.add(aspect_sentiment)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': '分析完成',
+            'feedback': feedback.to_dict(),
+            'analysis': result
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print(f"分析失败: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': f'分析失败: {str(e)}'}), 500
 

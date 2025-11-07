@@ -5,7 +5,8 @@ import { useAuth } from '../contexts/AuthContext'
 import {
   UserOutlined,
   LogoutOutlined,
-  DashboardOutlined
+  DashboardOutlined,
+  SettingOutlined
 } from '@ant-design/icons'
 import './Layout.css'
 
@@ -27,11 +28,18 @@ const Layout = ({ children }) => {
       icon: <UserOutlined />,
       label: '我的反馈'
     },
-    ...(isAdmin ? [{
-      key: '/dashboard',
-      icon: <DashboardOutlined />,
-      label: '数据概览'
-    }] : [])
+    ...(isAdmin ? [
+      {
+        key: '/dashboard',
+        icon: <DashboardOutlined />,
+        label: '数据概览'
+      },
+      {
+        key: '/admin',
+        icon: <SettingOutlined />,
+        label: '评论管理'
+      }
+    ] : [])
   ]
 
   const userMenuItems = [
