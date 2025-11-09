@@ -1,0 +1,12 @@
+.admin-portal {
+  padding: 0;
+}
+
+.admin-portal .ant-card {
+  margin-bottom: 24px;
+}
+
+.admin-portal .ant-table {
+  background: #fff;
+}
+
